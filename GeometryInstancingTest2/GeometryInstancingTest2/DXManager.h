@@ -33,22 +33,20 @@ namespace MyDirectX
 	public:
 		DXManager(HWND hwnd);
 		void Update();
-		~DXManager() {};
+		~DXManager();
 	private:
 		//DirectXÇ…ïKóvÇ»ïœêî
 		ComPtr<IDXGISwapChain> mSwapChain;
 		ComPtr<ID3D11Device> mDevice;
 		ComPtr<ID3D11DeviceContext> mDeviceContext;
-		ComPtr<ID3D11RenderTargetView> mRenderTargetView;
 		ComPtr<ID3D11RasterizerState> mRasterizerState;
 		ComPtr<ID3D11VertexShader> mVertexShader;
 		ComPtr<ID3D11PixelShader> mPixelShader;
 		ComPtr<ID3D11InputLayout> mInputLayout;
+		ComPtr<ID3D11RenderTargetView> mRenderTargetView;
 		ComPtr<ID3D11Buffer> mConstantBuffer;
-		ID3D11Buffer* mConstantBuffer2;
 		ComPtr<ID3D11Buffer> mVertexBuffer;
-		D3D11_VIEWPORT mViewPort;
-		float *mClearColor;
+		//ï`âÊÇ∑ÇÈí∏ì_êî
 		int mDrawNum;
 	};
 }

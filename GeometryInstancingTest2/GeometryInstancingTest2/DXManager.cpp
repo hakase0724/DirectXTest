@@ -78,9 +78,27 @@ DXManager::DXManager(HWND hwnd)
 	bd.CPUAccessFlags = 0;
 	bd.MiscFlags = 0;
 	bd.StructureByteStride = 0;
-	D3D11_SUBRESOURCE_DATA InitData;
-	InitData.pSysMem = vertices;
-	mDevice->CreateBuffer(&bd, &InitData, &mVertexBuffer);
+	D3D11_SUBRESOURCE_DATA vertexData;
+	vertexData.pSysMem = vertices;
+	mDevice->CreateBuffer(&bd, &vertexData, &mVertexBuffer);
+
+	int indexes[] = 
+	{
+		0,2,1,
+		0,3,2,
+	};
+	mDrawNum = sizeof(indexes) / sizeof(indexes[0]);
+	// インデックスデータ用バッファの設定
+	D3D11_BUFFER_DESC bd_index;
+	bd_index.ByteWidth = sizeof(int) * mDrawNum;
+	bd_index.Usage = D3D11_USAGE_DEFAULT;
+	bd_index.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	bd_index.CPUAccessFlags = 0;
+	bd_index.MiscFlags = 0;
+	bd_index.StructureByteStride = 0;
+	D3D11_SUBRESOURCE_DATA indexData;
+	indexData.pSysMem = indexes;
+	mDevice->CreateBuffer(&bd_index, &indexData, &mIndexBuffer);
 
 	// ラスタライザの設定
 	D3D11_RASTERIZER_DESC rdc = {};
@@ -93,6 +111,7 @@ DXManager::DXManager(HWND hwnd)
 	UINT stride = sizeof(VERTEX);
 	UINT offset = 0;
 	mDeviceContext->IASetVertexBuffers(0, 1, mVertexBuffer.GetAddressOf(), &stride, &offset);
+	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT,offset);
 	mDeviceContext->IASetInputLayout(mInputLayout.Get());                          
 	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);  
 	mDeviceContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), NULL);               
@@ -115,19 +134,19 @@ void DXManager::Update()
 	XMVECTOR eye_lookat = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);    
 	XMVECTOR eye_up = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);          
 	XMMATRIX View = XMMatrixLookAtLH(eye_pos, eye_lookat, eye_up);  
-	XMMATRIX Proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, (FLOAT)WindowWidth / (FLOAT)WindowHeight, 0.1f, 110.0f); 
-	XMMATRIX World = XMMatrixRotationY(0);               
+	XMMATRIX Proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, (FLOAT)WindowWidth / (FLOAT)WindowHeight, 0.1f, 110.0f);               
 
 	// パラメータの受け渡し
 	D3D11_MAPPED_SUBRESOURCE pdata;
 	CONSTANT_BUFFER cb;
-	cb.mWVP = XMMatrixTranspose(World * View * Proj);                              
+	cb.mWVPs[0] = (XMMatrixTranspose(XMMatrixRotationY(90) * XMMatrixTranslation(0, 0, 0) * View * Proj));
+	cb.mWVPs[1] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, 1, 0) * View * Proj));
 	mDeviceContext->Map(mConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
 	memcpy_s(pdata.pData, pdata.RowPitch, (void*)(&cb), sizeof(cb));              
 	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);                                       
 
 	// 描画実行
-	mDeviceContext->Draw(mDrawNum, 0);
+	mDeviceContext->DrawIndexedInstanced(mDrawNum, 2, 0,0,0);
 	mSwapChain->Present(0, 0);
 }
 

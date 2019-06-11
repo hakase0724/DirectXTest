@@ -3,6 +3,7 @@
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <string>
+#include <vector>
 #include <wrl/client.h>
 
 #pragma comment(lib, "d3d11.lib")
@@ -23,7 +24,7 @@ struct VERTEX
 // GPU(シェーダ側)へ送る数値をまとめた構造体
 struct CONSTANT_BUFFER 
 {
-	DirectX::XMMATRIX mWVP;
+	DirectX::XMMATRIX mWVPs[10];
 };
 
 namespace MyDirectX
@@ -46,6 +47,7 @@ namespace MyDirectX
 		ComPtr<ID3D11RenderTargetView> mRenderTargetView;
 		ComPtr<ID3D11Buffer> mConstantBuffer;
 		ComPtr<ID3D11Buffer> mVertexBuffer;
+		ComPtr<ID3D11Buffer> mIndexBuffer;
 		//描画する頂点数
 		int mDrawNum;
 	};

@@ -1,14 +1,30 @@
 cbuffer global
 {
-    matrix gWVP;
+    matrix gWVP[10];
 };
 
-float4 VS(float4 pos : POSITION) : SV_POSITION
+struct VS_IN
 {
-    return mul(pos, gWVP);
+    float4 pos : POSITION;
+    uint instanceID : SV_InstanceID;
 };
 
-float4 PS() : SV_Target
+struct VS_OUT
 {
-    return float4(1, 1, 1, 1);
+    float4 pos : SV_POSITION;
+    uint id : COLOR;
+};
+
+VS_OUT VS(VS_IN input)  
+{
+    VS_OUT output;
+    output.pos = mul(input.pos, gWVP[input.instanceID]);
+    output.id = input.instanceID;
+    return output;
+};
+
+float4 PS(VS_OUT input) : SV_Target
+{
+    float color = (input.id + 1) * 0.5f;
+    return float4(color, color, color, 1);
 };

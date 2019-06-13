@@ -6,6 +6,7 @@ using namespace MyDirectX;
 
 DXManager::DXManager(HWND hwnd)
 {
+	mInstanceNum = 10;
 	DXGI_SWAP_CHAIN_DESC scd = { 0 };
 	scd.BufferCount = 1;
 	scd.BufferDesc.Width = WindowWidth;
@@ -47,16 +48,20 @@ DXManager::DXManager(HWND hwnd)
 	D3D11_INPUT_ELEMENT_DESC layout[] = 
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "MATRIX",   0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1,  0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "MATRIX",   1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "MATRIX",   2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "MATRIX",   3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	};
-	mDevice->CreateInputLayout(layout, 1, pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), &mInputLayout);
+	auto hr = mDevice->CreateInputLayout(layout, _countof(layout), pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), &mInputLayout);
 	pCompileVS->Release();
 	pCompilePS->Release();
 
 	// 定数バッファの設定
 	D3D11_BUFFER_DESC cb;
-	cb.ByteWidth = sizeof(CONSTANT_BUFFER);
+	cb.ByteWidth = sizeof(DirectX::XMMATRIX) * mInstanceNum;
 	cb.Usage = D3D11_USAGE_DYNAMIC;
-	cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cb.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	cb.MiscFlags = 0;
 	cb.StructureByteStride = 0;
@@ -108,17 +113,18 @@ DXManager::DXManager(HWND hwnd)
 	mDevice->CreateRasterizerState(&rdc, &mRasterizerState);
 
 	//パイプラインの構築
-	UINT stride = sizeof(VERTEX);
-	UINT offset = 0;
-	mDeviceContext->IASetVertexBuffers(0, 1, mVertexBuffer.GetAddressOf(), &stride, &offset);
-	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT,offset);
+	ID3D11Buffer** bufs[] = {mVertexBuffer.GetAddressOf(),mConstantBuffer.GetAddressOf()};
+	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
+	UINT offset[] = {0,0};
+	mDeviceContext->IASetVertexBuffers(0, 2, *bufs, stride, offset);
+	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT,0);
 	mDeviceContext->IASetInputLayout(mInputLayout.Get());                          
 	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);  
 	mDeviceContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), NULL);               
 	mDeviceContext->RSSetViewports(1, &vp);                                      
 	mDeviceContext->VSSetShader(mVertexShader.Get(), NULL, 0);                         
 	mDeviceContext->PSSetShader(mPixelShader.Get(), NULL, 0);                            
-	mDeviceContext->VSSetConstantBuffers(0, 1, mConstantBuffer.GetAddressOf());                   
+	//mDeviceContext->VSSetConstantBuffers(0, 1, mConstantBuffer.GetAddressOf());                   
 	mDeviceContext->RSSetState(mRasterizerState.Get());                                    
 
 }
@@ -139,14 +145,20 @@ void DXManager::Update()
 	// パラメータの受け渡し
 	D3D11_MAPPED_SUBRESOURCE pdata;
 	CONSTANT_BUFFER cb;
-	cb.mWVPs[0] = (XMMatrixTranspose(XMMatrixRotationY(90) * XMMatrixTranslation(0, 0, 0) * View * Proj));
+	cb.mWVPs[0] = (XMMatrixTranspose(XMMatrixScaling(1.0f, 1.0f, 1.0f) * XMMatrixRotationY(45) * XMMatrixTranslation(-1, 0, 0) * View * Proj));
 	cb.mWVPs[1] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, 1, 0) * View * Proj));
+	cb.mWVPs[2] = (XMMatrixTranspose(XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixRotationY(0) * XMMatrixTranslation(1, 0, 0) * View * Proj));
+	
 	mDeviceContext->Map(mConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
-	memcpy_s(pdata.pData, pdata.RowPitch, (void*)(&cb), sizeof(cb));              
-	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);                                       
+	DirectX::XMMATRIX* matrix = (DirectX::XMMATRIX*)(pdata.pData);
+	for (int i = 0; i < mInstanceNum; i++)
+	{
+		matrix[i] = cb.mWVPs[i];
+	}        
+	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);
 
 	// 描画実行
-	mDeviceContext->DrawIndexedInstanced(mDrawNum, 2, 0,0,0);
+	mDeviceContext->DrawIndexedInstanced(mDrawNum, mInstanceNum, 0,0,0);
 	mSwapChain->Present(0, 0);
 }
 

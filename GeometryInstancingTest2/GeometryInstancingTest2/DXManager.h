@@ -50,5 +50,6 @@ namespace MyDirectX
 		ComPtr<ID3D11Buffer> mIndexBuffer;
 		//•`‰æ‚·‚é’¸“_”
 		int mDrawNum;
+		int mInstanceNum;
 	};
 }

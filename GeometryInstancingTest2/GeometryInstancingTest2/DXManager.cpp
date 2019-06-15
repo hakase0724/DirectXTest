@@ -113,13 +113,13 @@ DXManager::DXManager(HWND hwnd)
 	mDevice->CreateRasterizerState(&rdc, &mRasterizerState);
 
 	//パイプラインの構築
-	ID3D11Buffer** bufs[] = {mVertexBuffer.GetAddressOf(),mConstantBuffer.GetAddressOf()};
+	/*ID3D11Buffer** bufs[] = {mVertexBuffer.GetAddressOf(),mConstantBuffer.GetAddressOf()};
 	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
 	UINT offset[] = {0,0};
 	mDeviceContext->IASetVertexBuffers(0, 2, *bufs, stride, offset);
 	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT,0);
 	mDeviceContext->IASetInputLayout(mInputLayout.Get());                          
-	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);  
+	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);  */
 	mDeviceContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), NULL);               
 	mDeviceContext->RSSetViewports(1, &vp);                                      
 	mDeviceContext->VSSetShader(mVertexShader.Get(), NULL, 0);                         
@@ -154,8 +154,18 @@ void DXManager::Update()
 	for (int i = 0; i < mInstanceNum; i++)
 	{
 		matrix[i] = cb.mWVPs[i];
-	}        
+	}
+	//memcpy_s(pdata.pData,pdata.RowPitch,(void*)&cb,sizeof(cb));
+	      
 	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);
+
+	ID3D11Buffer* bufs[] = { mVertexBuffer.Get(),mConstantBuffer.Get() };
+	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
+	UINT offset[] = { 0,0 };
+	mDeviceContext->IASetVertexBuffers(0, 2, bufs, stride, offset);
+	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+	mDeviceContext->IASetInputLayout(mInputLayout.Get());
+	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// 描画実行
 	mDeviceContext->DrawIndexedInstanced(mDrawNum, mInstanceNum, 0,0,0);

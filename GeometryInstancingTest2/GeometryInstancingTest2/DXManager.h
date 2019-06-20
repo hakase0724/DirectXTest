@@ -27,6 +27,11 @@ struct CONSTANT_BUFFER
 	DirectX::XMMATRIX mWVPs[10];
 };
 
+struct PerInstanceData
+{
+	DirectX::XMMATRIX matrix;
+};
+
 namespace MyDirectX
 {
 	class DXManager
@@ -48,6 +53,8 @@ namespace MyDirectX
 		ComPtr<ID3D11Buffer> mConstantBuffer;
 		ComPtr<ID3D11Buffer> mVertexBuffer;
 		ComPtr<ID3D11Buffer> mIndexBuffer;
+		ComPtr<ID3D11Buffer> mPerInstanceBuffer;
+		ComPtr<ID3D11ShaderResourceView> mShaderResourceView;
 		//ï`âÊÇ∑ÇÈí∏ì_êî
 		int mDrawNum;
 		int mInstanceNum;

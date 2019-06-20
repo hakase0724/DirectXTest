@@ -3,6 +3,13 @@ cbuffer global
     matrix gWVP[10];
 };
 
+struct PerInstanceData
+{
+    matrix instanceMat;
+};
+
+StructuredBuffer<PerInstanceData> g_pInstanceData : register(t0);
+
 struct VS_IN
 {
     float4 pos : POSITION;
@@ -18,7 +25,7 @@ struct VS_OUT
 VS_OUT VS(VS_IN input)  
 {
     VS_OUT output;
-    output.pos = mul(input.pos, gWVP[input.instanceID]);
+    output.pos = mul(input.pos, g_pInstanceData[input.instanceID].instanceMat);
     return output;
 };
 

@@ -105,6 +105,23 @@ DXManager::DXManager(HWND hwnd)
 	indexData.pSysMem = indexes;
 	mDevice->CreateBuffer(&bd_index, &indexData, &mIndexBuffer);
 
+	D3D11_BUFFER_DESC bd_instance;
+	bd_instance.Usage = D3D11_USAGE_DYNAMIC;
+	bd_instance.ByteWidth = sizeof(PerInstanceData) * mInstanceNum;
+	bd_instance.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	bd_instance.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	bd_instance.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	bd_instance.StructureByteStride = sizeof(PerInstanceData);
+	mDevice->CreateBuffer(&bd_instance, NULL, &mPerInstanceBuffer);
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;   
+	srvDesc.BufferEx.FirstElement = 0;
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	srvDesc.BufferEx.NumElements = mInstanceNum;                 
+	mDevice->CreateShaderResourceView(mPerInstanceBuffer.Get(),&srvDesc,&mShaderResourceView);
+
 	// ラスタライザの設定
 	D3D11_RASTERIZER_DESC rdc = {};
 	rdc.FillMode = D3D11_FILL_SOLID;
@@ -144,20 +161,29 @@ void DXManager::Update()
 
 	// パラメータの受け渡し
 	D3D11_MAPPED_SUBRESOURCE pdata;
-	CONSTANT_BUFFER cb;
+	/*CONSTANT_BUFFER cb;
 	cb.mWVPs[0] = (XMMatrixTranspose(XMMatrixScaling(1.0f, 1.0f, 1.0f) * XMMatrixRotationY(45) * XMMatrixTranslation(-1, 0, 0) * View * Proj));
 	cb.mWVPs[1] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, 1, 0) * View * Proj));
-	cb.mWVPs[2] = (XMMatrixTranspose(XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixRotationY(0) * XMMatrixTranslation(1, 0, 0) * View * Proj));
+	cb.mWVPs[2] = (XMMatrixTranspose(XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixRotationY(0) * XMMatrixTranslation(1, 0, 0) * View * Proj));*/
 	
 	mDeviceContext->Map(mConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
 	DirectX::XMMATRIX* matrix = (DirectX::XMMATRIX*)(pdata.pData);
 	for (int i = 0; i < mInstanceNum; i++)
 	{
-		matrix[i] = cb.mWVPs[i];
+		matrix[i] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, i, 0) * View * Proj));
 	}
 	//memcpy_s(pdata.pData,pdata.RowPitch,(void*)&cb,sizeof(cb));
 	      
 	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);
+
+	mDeviceContext->Map(mPerInstanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
+	PerInstanceData* instanceData = (PerInstanceData*)(pdata.pData);
+	for (int i = 0; i < mInstanceNum; i++)
+	{
+		instanceData[i].matrix = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, i, 0) * View * Proj));
+	}
+	mDeviceContext->Unmap(mPerInstanceBuffer.Get(), 0);
+
 
 	ID3D11Buffer* bufs[] = { mVertexBuffer.Get(),mConstantBuffer.Get() };
 	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
@@ -166,6 +192,7 @@ void DXManager::Update()
 	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
 	mDeviceContext->IASetInputLayout(mInputLayout.Get());
 	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	mDeviceContext->VSSetShaderResources(0, 1, mShaderResourceView.GetAddressOf());
 
 	// 描画実行
 	mDeviceContext->DrawIndexedInstanced(mDrawNum, mInstanceNum, 0,0,0);

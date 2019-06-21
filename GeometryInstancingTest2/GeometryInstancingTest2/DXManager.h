@@ -5,15 +5,16 @@
 #include <string>
 #include <vector>
 #include <wrl/client.h>
+#include "DXInput.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
 using namespace Microsoft::WRL;
 //ウィンドウの横幅
-static const UINT WindowWidth = 1000;
+static const UINT WindowWidth = 500;
 //ウィンドウの縦幅
-static const UINT WindowHeight = 800;
+static const UINT WindowHeight = 400;
 
 // 一つの頂点情報を格納する構造体
 struct VERTEX 
@@ -21,15 +22,15 @@ struct VERTEX
 	DirectX::XMFLOAT3 V;
 };
 
-// GPU(シェーダ側)へ送る数値をまとめた構造体
-struct CONSTANT_BUFFER 
+struct CONSTANT_BUFFER
 {
-	DirectX::XMMATRIX mWVPs[10];
+	DirectX::XMMATRIX gWVP;
 };
 
 struct PerInstanceData
 {
 	DirectX::XMMATRIX matrix;
+	DirectX::XMVECTOR color;
 };
 
 namespace MyDirectX
@@ -38,9 +39,11 @@ namespace MyDirectX
 	{
 	public:
 		DXManager(HWND hwnd);
-		void Update();
+		bool Update();
 		~DXManager();
 	private:
+		void Render();
+		void RenderInstancing();
 		//DirectXに必要な変数
 		ComPtr<IDXGISwapChain> mSwapChain;
 		ComPtr<ID3D11Device> mDevice;
@@ -48,13 +51,21 @@ namespace MyDirectX
 		ComPtr<ID3D11RasterizerState> mRasterizerState;
 		ComPtr<ID3D11VertexShader> mVertexShader;
 		ComPtr<ID3D11PixelShader> mPixelShader;
+		ComPtr<ID3D11VertexShader> mVertexShader2;
+		ComPtr<ID3D11PixelShader> mPixelShader2;
 		ComPtr<ID3D11InputLayout> mInputLayout;
 		ComPtr<ID3D11RenderTargetView> mRenderTargetView;
-		ComPtr<ID3D11Buffer> mConstantBuffer;
 		ComPtr<ID3D11Buffer> mVertexBuffer;
 		ComPtr<ID3D11Buffer> mIndexBuffer;
 		ComPtr<ID3D11Buffer> mPerInstanceBuffer;
+		ComPtr<ID3D11Buffer> mConstantBuffer;
 		ComPtr<ID3D11ShaderResourceView> mShaderResourceView;
+		std::unique_ptr<DXInput> mInput;
+		DirectX::XMMATRIX mView;
+		DirectX::XMMATRIX mProj;
+		DirectX::XMMATRIX mRotation;
+		DirectX::XMMATRIX mScale;
+		bool mIsInstancing = true;
 		//描画する頂点数
 		int mDrawNum;
 		int mInstanceNum;

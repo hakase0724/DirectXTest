@@ -114,7 +114,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hInstancePrev, LPSTR pCmdLine,
 			//計測終了時間を計測開始時間に
 			timeStart = timeEnd; 
 			// DirectXのループ処理                        
-			mDXManager->Update();
+			if(!mDXManager->Update()) break;
 		}
 	}
 	return 0;

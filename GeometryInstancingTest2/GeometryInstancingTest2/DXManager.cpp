@@ -6,7 +6,8 @@ using namespace MyDirectX;
 
 DXManager::DXManager(HWND hwnd)
 {
-	mInstanceNum = 10;
+	mInput = std::make_unique<DXInput>(hwnd);
+	mInstanceNum = 40 * 500;
 	DXGI_SWAP_CHAIN_DESC scd = { 0 };
 	scd.BufferCount = 1;
 	scd.BufferDesc.Width = WindowWidth;
@@ -43,31 +44,21 @@ DXManager::DXManager(HWND hwnd)
 	mDevice->CreateVertexShader(pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), NULL, &mVertexShader);
 	D3DCompileFromFile(L"shader.hlsl", NULL, NULL, "PS", "ps_5_0", NULL, 0, &pCompilePS, NULL);
 	mDevice->CreatePixelShader(pCompilePS->GetBufferPointer(), pCompilePS->GetBufferSize(), NULL, &mPixelShader);
+	D3DCompileFromFile(L"shader2.hlsl", NULL, NULL, "VS", "vs_5_0", NULL, 0, &pCompileVS, NULL);
+	mDevice->CreateVertexShader(pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), NULL, &mVertexShader2);
+	D3DCompileFromFile(L"shader2.hlsl", NULL, NULL, "PS", "ps_5_0", NULL, 0, &pCompilePS, NULL);
+	mDevice->CreatePixelShader(pCompilePS->GetBufferPointer(), pCompilePS->GetBufferSize(), NULL, &mPixelShader2);
 
 	// 頂点レイアウト
 	D3D11_INPUT_ELEMENT_DESC layout[] = 
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "MATRIX",   0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1,  0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-		{ "MATRIX",   1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-		{ "MATRIX",   2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-		{ "MATRIX",   3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	};
-	auto hr = mDevice->CreateInputLayout(layout, _countof(layout), pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), &mInputLayout);
+	mDevice->CreateInputLayout(layout, _countof(layout), pCompileVS->GetBufferPointer(), pCompileVS->GetBufferSize(), &mInputLayout);
 	pCompileVS->Release();
 	pCompilePS->Release();
 
-	// 定数バッファの設定
-	D3D11_BUFFER_DESC cb;
-	cb.ByteWidth = sizeof(DirectX::XMMATRIX) * mInstanceNum;
-	cb.Usage = D3D11_USAGE_DYNAMIC;
-	cb.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	cb.MiscFlags = 0;
-	cb.StructureByteStride = 0;
-	mDevice->CreateBuffer(&cb, NULL, &mConstantBuffer);
-
-	// ポリゴンの頂点データの作成とそのバッファの設定
+	//ポリゴンの頂点データの作成とそのバッファの設定
 	VERTEX vertices[] = 
 	{
 		XMFLOAT3(-0.5f, 0.5f, 0.0f),
@@ -87,13 +78,13 @@ DXManager::DXManager(HWND hwnd)
 	vertexData.pSysMem = vertices;
 	mDevice->CreateBuffer(&bd, &vertexData, &mVertexBuffer);
 
+	// インデックスデータ用バッファの設定
 	int indexes[] = 
 	{
 		0,2,1,
 		0,3,2,
 	};
 	mDrawNum = sizeof(indexes) / sizeof(indexes[0]);
-	// インデックスデータ用バッファの設定
 	D3D11_BUFFER_DESC bd_index;
 	bd_index.ByteWidth = sizeof(int) * mDrawNum;
 	bd_index.Usage = D3D11_USAGE_DEFAULT;
@@ -105,6 +96,7 @@ DXManager::DXManager(HWND hwnd)
 	indexData.pSysMem = indexes;
 	mDevice->CreateBuffer(&bd_index, &indexData, &mIndexBuffer);
 
+	//インスタンスデータ用バッファの設定
 	D3D11_BUFFER_DESC bd_instance;
 	bd_instance.Usage = D3D11_USAGE_DYNAMIC;
 	bd_instance.ByteWidth = sizeof(PerInstanceData) * mInstanceNum;
@@ -113,7 +105,7 @@ DXManager::DXManager(HWND hwnd)
 	bd_instance.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	bd_instance.StructureByteStride = sizeof(PerInstanceData);
 	mDevice->CreateBuffer(&bd_instance, NULL, &mPerInstanceBuffer);
-
+	//インスタンス用のリソースビューを作成
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 	ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
 	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;   
@@ -121,6 +113,16 @@ DXManager::DXManager(HWND hwnd)
 	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 	srvDesc.BufferEx.NumElements = mInstanceNum;                 
 	mDevice->CreateShaderResourceView(mPerInstanceBuffer.Get(),&srvDesc,&mShaderResourceView);
+
+	// 定数バッファの作成(パラメータ受け渡し用)
+	D3D11_BUFFER_DESC cb;
+	cb.ByteWidth = sizeof(CONSTANT_BUFFER);
+	cb.Usage = D3D11_USAGE_DYNAMIC;
+	cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	cb.MiscFlags = 0;
+	cb.StructureByteStride = 0;
+	mDevice->CreateBuffer(&cb, NULL, &mConstantBuffer);
 
 	// ラスタライザの設定
 	D3D11_RASTERIZER_DESC rdc = {};
@@ -130,77 +132,106 @@ DXManager::DXManager(HWND hwnd)
 	mDevice->CreateRasterizerState(&rdc, &mRasterizerState);
 
 	//パイプラインの構築
-	/*ID3D11Buffer** bufs[] = {mVertexBuffer.GetAddressOf(),mConstantBuffer.GetAddressOf()};
-	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
-	UINT offset[] = {0,0};
-	mDeviceContext->IASetVertexBuffers(0, 2, *bufs, stride, offset);
-	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT,0);
-	mDeviceContext->IASetInputLayout(mInputLayout.Get());                          
-	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);  */
+	ID3D11Buffer* bufs[] = { mVertexBuffer.Get() };
+	UINT stride[] = { sizeof(VERTEX) };
+	UINT offset[] = { 0 };
+	mDeviceContext->IASetVertexBuffers(0, sizeof(bufs) / sizeof(bufs[0]), bufs, stride, offset);
+	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+	mDeviceContext->IASetInputLayout(mInputLayout.Get());
 	mDeviceContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), NULL);               
 	mDeviceContext->RSSetViewports(1, &vp);                                      
-	mDeviceContext->VSSetShader(mVertexShader.Get(), NULL, 0);                         
-	mDeviceContext->PSSetShader(mPixelShader.Get(), NULL, 0);                            
-	//mDeviceContext->VSSetConstantBuffers(0, 1, mConstantBuffer.GetAddressOf());                   
-	mDeviceContext->RSSetState(mRasterizerState.Get());                                    
+	/*mDeviceContext->VSSetShader(mVertexShader.Get(), NULL, 0);                         
+	mDeviceContext->PSSetShader(mPixelShader.Get(), NULL, 0);       */                     
+	mDeviceContext->RSSetState(mRasterizerState.Get());      
 
+	// パラメータの計算
+	XMVECTOR eye_pos = XMVectorSet(0.0f, 0.0f, -3.0f, 0.0f);
+	XMVECTOR eye_lookat = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMVECTOR eye_up = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
+	mView = XMMatrixLookAtLH(eye_pos, eye_lookat, eye_up);
+	mProj = XMMatrixPerspectiveFovLH(XM_PIDIV4, (FLOAT)WindowWidth / (FLOAT)WindowHeight, 0.1f, 110.0f);
+	mScale = XMMatrixScalingFromVector(XMVectorSet(0.1f, 0.1f, 0.1f, 0.0f));
+	mRotation = XMMatrixRotationX(0.0f) * XMMatrixRotationY(0.0f) * XMMatrixRotationZ(0.0f);
 }
 
-void DXManager::Update()
+bool DXManager::Update()
 {
+	mInput->SetInputState();
 	//画面クリア
 	float clearColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	mDeviceContext->ClearRenderTargetView(mRenderTargetView.Get(), clearColor);
 
-	// パラメータの計算
-	XMVECTOR eye_pos = XMVectorSet(0.0f, 1.0f, -2.0f, 1.0f);       
-	XMVECTOR eye_lookat = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);    
-	XMVECTOR eye_up = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);          
-	XMMATRIX View = XMMatrixLookAtLH(eye_pos, eye_lookat, eye_up);  
-	XMMATRIX Proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, (FLOAT)WindowWidth / (FLOAT)WindowHeight, 0.1f, 110.0f);               
+	if(mInput->GetKeyDown(DIK_SPACE))
+	{
+		mIsInstancing ^= 1;
+	}
 
+	if (mIsInstancing) RenderInstancing();
+	else Render();
+
+	mSwapChain->Present(0, 0);
+	if (mInput->GetKeyDown(DIK_ESCAPE)) return false;
+	mInput->SetPreBuffer();
+	return true;
+}
+
+void DXManager::Render()
+{
+	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	mDeviceContext->VSSetConstantBuffers(0,1,mConstantBuffer.GetAddressOf());
+	mDeviceContext->VSSetShader(mVertexShader2.Get(), NULL, 0);
+	mDeviceContext->PSSetShader(mPixelShader2.Get(), NULL, 0);
+	D3D11_MAPPED_SUBRESOURCE pdata;
+	CONSTANT_BUFFER cb;                              
+	float defaultYPos = 1.5f;
+	float offset = 0.11f;
+	int oneLineNum = 40;
+	for (int i = 0; i < mInstanceNum; i++)
+	{
+		mDeviceContext->Map(mConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
+		//とりあえずループ変数使って移動
+		float xPos = i % oneLineNum * offset - 2.0f;
+		float yPos = defaultYPos - (i / oneLineNum * offset);
+		XMMATRIX move = XMMatrixTranslation(xPos, yPos, 1.0f);
+		//行列情報をセット
+		cb.gWVP = XMMatrixTranspose(mScale * mRotation * move * mView * mProj);
+		memcpy_s(pdata.pData, pdata.RowPitch, (void*)(&cb), sizeof(cb));
+		mDeviceContext->Unmap(mConstantBuffer.Get(), 0);
+		mDeviceContext->DrawIndexed(mDrawNum,0,0);
+	}
+	
+}
+
+void DXManager::RenderInstancing()
+{
+	mDeviceContext->VSSetShader(mVertexShader.Get(), NULL, 0);
+	mDeviceContext->PSSetShader(mPixelShader.Get(), NULL, 0);
 	// パラメータの受け渡し
 	D3D11_MAPPED_SUBRESOURCE pdata;
-	/*CONSTANT_BUFFER cb;
-	cb.mWVPs[0] = (XMMatrixTranspose(XMMatrixScaling(1.0f, 1.0f, 1.0f) * XMMatrixRotationY(45) * XMMatrixTranslation(-1, 0, 0) * View * Proj));
-	cb.mWVPs[1] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, 1, 0) * View * Proj));
-	cb.mWVPs[2] = (XMMatrixTranspose(XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixRotationY(0) * XMMatrixTranslation(1, 0, 0) * View * Proj));*/
-	
-	mDeviceContext->Map(mConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
-	DirectX::XMMATRIX* matrix = (DirectX::XMMATRIX*)(pdata.pData);
-	for (int i = 0; i < mInstanceNum; i++)
-	{
-		matrix[i] = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, i, 0) * View * Proj));
-	}
-	//memcpy_s(pdata.pData,pdata.RowPitch,(void*)&cb,sizeof(cb));
-	      
-	mDeviceContext->Unmap(mConstantBuffer.Get(), 0);
-
 	mDeviceContext->Map(mPerInstanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &pdata);
 	PerInstanceData* instanceData = (PerInstanceData*)(pdata.pData);
+	float defaultYPos = 1.5f;
+	float offset = 0.11f;
+	int oneLineNum = 40;
 	for (int i = 0; i < mInstanceNum; i++)
 	{
-		instanceData[i].matrix = (XMMatrixTranspose(XMMatrixRotationY(0) * XMMatrixTranslation(0, i, 0) * View * Proj));
+		//とりあえずループ変数使って移動
+		float xPos = i % oneLineNum * offset - 2.0f;
+		float yPos = defaultYPos - (i / oneLineNum * offset);
+		XMMATRIX move = XMMatrixTranslation(xPos, yPos, 1.0f);
+		//行列情報をセット
+		instanceData[i].matrix = XMMatrixTranspose(mScale * mRotation * move * mView * mProj);
+		//色情報をセット
+		instanceData[i].color = XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f);
 	}
 	mDeviceContext->Unmap(mPerInstanceBuffer.Get(), 0);
-
-
-	ID3D11Buffer* bufs[] = { mVertexBuffer.Get(),mConstantBuffer.Get() };
-	UINT stride[] = { sizeof(VERTEX),sizeof(DirectX::XMMATRIX) };
-	UINT offset[] = { 0,0 };
-	mDeviceContext->IASetVertexBuffers(0, 2, bufs, stride, offset);
-	mDeviceContext->IASetIndexBuffer(mIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-	mDeviceContext->IASetInputLayout(mInputLayout.Get());
-	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	mDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	mDeviceContext->VSSetShaderResources(0, 1, mShaderResourceView.GetAddressOf());
-
+	mDeviceContext->PSSetShaderResources(0, 1, mShaderResourceView.GetAddressOf());
 	// 描画実行
-	mDeviceContext->DrawIndexedInstanced(mDrawNum, mInstanceNum, 0,0,0);
-	mSwapChain->Present(0, 0);
+	mDeviceContext->DrawIndexedInstanced(mDrawNum, mInstanceNum, 0, 0, 0);
 }
 
-DXManager::~DXManager()
-{
-}
+DXManager::~DXManager(){}
 
 
